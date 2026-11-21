@@ -120,6 +120,11 @@
     setLang(lang);   // apply the saved or default language on page load
 
     // ---------- 3. SMART on FHIR connection ----------
+    // If someone opens the site address directly, send them to sign in first.
+    if (location.search.indexOf("code=") === -1 && !sessionStorage.getItem("SMART_KEY")) {
+      location.replace("launch.html");
+    }
+
     FHIR.oauth2.ready().then(function (client) {
 
       // Read the Patient in context

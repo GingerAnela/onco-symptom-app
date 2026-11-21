@@ -1,14 +1,29 @@
 <!DOCTYPE html>
-<html>
-<head><title>Launching...</title></head>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Launching...</title>
+</head>
 <body>
-  <p>Connecting to the EHR...</p>
+  <h1>Starting sign-in...</h1>
+  <p>You will go to the SMART sandbox to choose a patient, then return to the app.</p>
+  <p id="error"></p>
   <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
   <script>
+    // Patient standalone launch against the SMART Health IT R4 sandbox.
+    // If the SMART App Launcher opens this page with its own iss, that one is used instead.
+    var launchOptions = [3, "", "", "AUTO", 0, 0, 0, "", "", "", "", "", "", "", 0, 1, ""];
+    var sandboxIss = "https://launch.smarthealthit.org/v/r4/sim/"
+      + btoa(JSON.stringify(launchOptions)).replace(/=+$/g, "").replace(/\+/g, "-").replace(/\//g, "_")
+      + "/fhir";
+
     FHIR.oauth2.authorize({
       clientId: "onco-symptom-app",
       scope: "launch launch/patient openid fhirUser patient/Patient.read patient/Condition.read patient/Observation.read patient/QuestionnaireResponse.write",
-      redirectUri: "index.html"
+      redirectUri: "index.html",
+      iss: sandboxIss
+    }).catch(function (err) {
+      document.getElementById("error").textContent = "Could not start sign-in: " + (err.message || err);
     });
   </script>
 </body>
