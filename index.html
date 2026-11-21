@@ -120,11 +120,6 @@
     setLang(lang);   // apply the saved or default language on page load
 
     // ---------- 3. SMART on FHIR connection ----------
-    // NEW: If someone opens the site address directly, send them to sign in first.
-    if (location.search.indexOf("code=") === -1 && !sessionStorage.getItem("SMART_KEY")) {
-      location.replace("launch.html");
-    }
-
     FHIR.oauth2.ready().then(function (client) {
 
       // Read the Patient in context
@@ -151,4 +146,52 @@
         });
       });
 
-      // Create a QuestionnaireResponse when
+      // Create a QuestionnaireResponse when the patient submits
+      document.getElementById("submit").onclick = function () {
+        var ids = ["nausea", "fatigue", "pain"];
+        var english = { nausea: "Nausea", fatigue: "Fatigue", pain: "Pain" };
+        var result = document.getElementById("result");
+
+        // Check that every answer is a whole number from 0 to 10
+        var scores = {};
+        for (var i = 0; i < ids.length; i++) {
+          var v = parseInt(document.getElementById(ids[i]).value, 10);
+          if (isNaN(v) || v < 0 || v > 10) {
+            result.className = "alert";
+            result.textContent = t("invalid");
+            return;
+          }
+          scores[ids[i]] = v;
+        }
+
+        var qr = {
+          resourceType: "QuestionnaireResponse",
+          language: lang,                       // records "en" or "es"
+          status: "completed",
+          subject: { reference: "Patient/" + client.patient.id },
+          authored: new Date().toISOString(),
+          item: ids.map(function (id) {
+            return {
+              linkId: id,                       // same in both languages
+              text: english[id],                // stored in English for the care team
+              answer: [{ valueInteger: scores[id] }]
+            };
+          })
+        };
+
+        client.create(qr).then(function (saved) {
+          var severe = ids.some(function (id) { return scores[id] >= 7; });
+          result.className = severe ? "alert" : "ok";
+          result.textContent = t("saved") + saved.id + " | " + (severe ? t("alert") : t("noAlert"));
+        }).catch(function (err) {
+          result.className = "alert";
+          result.textContent = t("error") + err.message;
+        });
+      };
+
+    }).catch(function (err) {
+      document.getElementById("patient").textContent = t("launchError") + err.message;
+    });
+  </script>
+</body>
+</html>

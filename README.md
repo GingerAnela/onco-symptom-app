@@ -8,4 +8,3 @@ Uses fictional sandbox data only. Not for clinical use.
 
 Test at https://launch.smarthealthit.org (Patient Standalone Launch, R4) with the launch URL
 `https://YOURUSERNAME.github.io/onco-symptom-app/launch.html`.
-
