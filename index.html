@@ -1,14 +1,196 @@
 <!DOCTYPE html>
-<html>
-<head><title>Launching...</title></head>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oncology Symptom Monitor</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 30px auto; padding: 0 15px; }
+    h1 { color: #1F3864; }
+    h2 { color: #2E5597; margin-top: 25px; }
+    label { display: block; margin-top: 12px; font-size: 17px; }
+    input[type=number] { width: 60px; font-size: 16px; margin-left: 8px; }
+    button { margin-top: 15px; padding: 10px 18px; font-size: 16px; cursor: pointer; }
+    .toggle { float: right; }
+    .toggle button { margin: 0 0 0 5px; padding: 6px 12px; border: 1px solid #1F3864; background: white; color: #1F3864; }
+    .toggle button.active { background: #1F3864; color: white; }
+    .alert { color: #B00020; font-weight: bold; }
+    .ok { color: #1B5E20; }
+  </style>
+</head>
 <body>
-  <p>Connecting to the EHR...</p>
+  <div class="toggle">
+    <button id="btn-en" onclick="setLang('en')">English</button>
+    <button id="btn-es" onclick="setLang('es')">Español</button>
+  </div>
+ 
+  <h1 data-t="title"></h1>
+ 
+  <h2 data-t="patientHeading"></h2>
+  <div id="patient"></div>
+ 
+  <h2 data-t="conditionsHeading"></h2>
+  <ul id="conditions"></ul>
+ 
+  <h2 data-t="checkHeading"></h2>
+  <p data-t="instructions"></p>
+  <label><span data-t="nausea"></span> <input type="number" id="nausea" min="0" max="10" value="0"></label>
+  <label><span data-t="fatigue"></span> <input type="number" id="fatigue" min="0" max="10" value="0"></label>
+  <label><span data-t="pain"></span> <input type="number" id="pain" min="0" max="10" value="0"></label>
+  <button id="submit" data-t="submit"></button>
+  <p id="result"></p>
+ 
   <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
   <script>
-    FHIR.oauth2.authorize({
-      clientId: "onco-symptom-app",
-      scope: "launch launch/patient openid fhirUser patient/Patient.read patient/Condition.read patient/Observation.read patient/QuestionnaireResponse.write",
-      redirectUri: "index.html"
+    // ---------- 1. All screen text in both languages ----------
+    var text = {
+      en: {
+        title: "Oncology Symptom Monitor",
+        patientHeading: "Patient",
+        conditionsHeading: "Conditions",
+        checkHeading: "Weekly Symptom Check",
+        instructions: "Rate each symptom from 0 (none) to 10 (worst possible).",
+        nausea: "Nausea",
+        fatigue: "Fatigue",
+        pain: "Pain",
+        submit: "Submit symptoms",
+        loading: "Loading...",
+        born: "Born",
+        unknown: "Unknown",
+        noConditions: "No conditions found",
+        unnamed: "Unnamed condition",
+        saved: "Saved. Record ID: ",
+        alert: "ALERT: One or more symptoms are 7 or higher. Your care team will be notified.",
+        noAlert: "Thank you. No severe symptoms reported.",
+        invalid: "Please enter a number from 0 to 10 for each symptom.",
+        error: "Error: ",
+        launchError: "Launch error: "
+      },
+      es: {
+        title: "Monitor de Síntomas de Oncología",
+        patientHeading: "Paciente",
+        conditionsHeading: "Condiciones",
+        checkHeading: "Revisión Semanal de Síntomas",
+        instructions: "Califique cada síntoma de 0 (ninguno) a 10 (el peor posible).",
+        nausea: "Náuseas",
+        fatigue: "Fatiga",
+        pain: "Dolor",
+        submit: "Enviar síntomas",
+        loading: "Cargando...",
+        born: "Fecha de nacimiento",
+        unknown: "Desconocido",
+        noConditions: "No se encontraron condiciones",
+        unnamed: "Condición sin nombre",
+        saved: "Guardado. Número de registro: ",
+        alert: "ALERTA: Uno o más síntomas son 7 o más. Se notificará a su equipo de atención.",
+        noAlert: "Gracias. No se reportaron síntomas graves.",
+        invalid: "Por favor ingrese un número del 0 al 10 para cada síntoma.",
+        error: "Error: ",
+        launchError: "Error al iniciar: "
+      }
+    };
+ 
+    // ---------- 2. Language switching ----------
+    var lang = localStorage.getItem("symptomAppLang") || "en";
+    var patientData = null;
+ 
+    function t(key) { return text[lang][key]; }
+ 
+    function setLang(newLang) {
+      lang = newLang;
+      localStorage.setItem("symptomAppLang", lang);   // remember the choice
+      document.documentElement.lang = lang;           // tells screen readers the language
+      document.querySelectorAll("[data-t]").forEach(function (el) {
+        el.textContent = t(el.getAttribute("data-t"));
+      });
+      document.getElementById("btn-en").classList.toggle("active", lang === "en");
+      document.getElementById("btn-es").classList.toggle("active", lang === "es");
+      showPatient();
+      document.getElementById("result").textContent = "";
+    }
+ 
+    function showPatient() {
+      var box = document.getElementById("patient");
+      if (!patientData) { box.textContent = t("loading"); return; }
+      var name = patientData.name && patientData.name[0];
+      var full = name ? (name.given || []).join(" ") + " " + (name.family || "") : t("unknown");
+      box.textContent = full + " | " + t("born") + ": " + (patientData.birthDate || t("unknown"));
+    }
+ 
+    setLang(lang);   // apply the saved or default language on page load
+ 
+    // ---------- 3. SMART on FHIR connection ----------
+    FHIR.oauth2.ready().then(function (client) {
+ 
+      // Read the Patient in context
+      client.patient.read().then(function (p) {
+        patientData = p;
+        showPatient();
+      });
+ 
+      // Search this patient's Conditions
+      client.request("Condition?patient=" + client.patient.id).then(function (bundle) {
+        var list = document.getElementById("conditions");
+        var entries = bundle.entry || [];
+        list.innerHTML = "";
+        if (entries.length === 0) {
+          var li = document.createElement("li");
+          li.setAttribute("data-t", "noConditions");
+          li.textContent = t("noConditions");
+          list.appendChild(li);
+        }
+        entries.forEach(function (e) {
+          var li = document.createElement("li");
+          li.textContent = (e.resource.code && e.resource.code.text) || t("unnamed");
+          list.appendChild(li);
+        });
+      });
+ 
+      // Create a QuestionnaireResponse when the patient submits
+      document.getElementById("submit").onclick = function () {
+        var ids = ["nausea", "fatigue", "pain"];
+        var english = { nausea: "Nausea", fatigue: "Fatigue", pain: "Pain" };
+        var result = document.getElementById("result");
+ 
+        // Check that every answer is a whole number from 0 to 10
+        var scores = {};
+        for (var i = 0; i < ids.length; i++) {
+          var v = parseInt(document.getElementById(ids[i]).value, 10);
+          if (isNaN(v) || v < 0 || v > 10) {
+            result.className = "alert";
+            result.textContent = t("invalid");
+            return;
+          }
+          scores[ids[i]] = v;
+        }
+ 
+        var qr = {
+          resourceType: "QuestionnaireResponse",
+          language: lang,                       // records "en" or "es"
+          status: "completed",
+          subject: { reference: "Patient/" + client.patient.id },
+          authored: new Date().toISOString(),
+          item: ids.map(function (id) {
+            return {
+              linkId: id,                       // same in both languages
+              text: english[id],                // stored in English for the care team
+              answer: [{ valueInteger: scores[id] }]
+            };
+          })
+        };
+ 
+        client.create(qr).then(function (saved) {
+          var severe = ids.some(function (id) { return scores[id] >= 7; });
+          result.className = severe ? "alert" : "ok";
+          result.textContent = t("saved") + saved.id + " | " + (severe ? t("alert") : t("noAlert"));
+        }).catch(function (err) {
+          result.className = "alert";
+          result.textContent = t("error") + err.message;
+        });
+      };
+ 
+    }).catch(function (err) {
+      document.getElementById("patient").textContent = t("launchError") + err.message;
     });
   </script>
 </body>
