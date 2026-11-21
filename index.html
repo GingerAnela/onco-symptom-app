@@ -23,15 +23,15 @@
     <button id="btn-en" onclick="setLang('en')">English</button>
     <button id="btn-es" onclick="setLang('es')">Español</button>
   </div>
- 
+
   <h1 data-t="title"></h1>
- 
+
   <h2 data-t="patientHeading"></h2>
   <div id="patient"></div>
- 
+
   <h2 data-t="conditionsHeading"></h2>
   <ul id="conditions"></ul>
- 
+
   <h2 data-t="checkHeading"></h2>
   <p data-t="instructions"></p>
   <label><span data-t="nausea"></span> <input type="number" id="nausea" min="0" max="10" value="0"></label>
@@ -39,7 +39,7 @@
   <label><span data-t="pain"></span> <input type="number" id="pain" min="0" max="10" value="0"></label>
   <button id="submit" data-t="submit"></button>
   <p id="result"></p>
- 
+
   <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
   <script>
     // ---------- 1. All screen text in both languages ----------
@@ -89,13 +89,13 @@
         launchError: "Error al iniciar: "
       }
     };
- 
+
     // ---------- 2. Language switching ----------
     var lang = localStorage.getItem("symptomAppLang") || "en";
     var patientData = null;
- 
+
     function t(key) { return text[lang][key]; }
- 
+
     function setLang(newLang) {
       lang = newLang;
       localStorage.setItem("symptomAppLang", lang);   // remember the choice
@@ -108,7 +108,7 @@
       showPatient();
       document.getElementById("result").textContent = "";
     }
- 
+
     function showPatient() {
       var box = document.getElementById("patient");
       if (!patientData) { box.textContent = t("loading"); return; }
@@ -116,18 +116,23 @@
       var full = name ? (name.given || []).join(" ") + " " + (name.family || "") : t("unknown");
       box.textContent = full + " | " + t("born") + ": " + (patientData.birthDate || t("unknown"));
     }
- 
+
     setLang(lang);   // apply the saved or default language on page load
- 
+
     // ---------- 3. SMART on FHIR connection ----------
+    // NEW: If someone opens the site address directly, send them to sign in first.
+    if (location.search.indexOf("code=") === -1 && !sessionStorage.getItem("SMART_KEY")) {
+      location.replace("launch.html");
+    }
+
     FHIR.oauth2.ready().then(function (client) {
- 
+
       // Read the Patient in context
       client.patient.read().then(function (p) {
         patientData = p;
         showPatient();
       });
- 
+
       // Search this patient's Conditions
       client.request("Condition?patient=" + client.patient.id).then(function (bundle) {
         var list = document.getElementById("conditions");
@@ -145,53 +150,5 @@
           list.appendChild(li);
         });
       });
- 
-      // Create a QuestionnaireResponse when the patient submits
-      document.getElementById("submit").onclick = function () {
-        var ids = ["nausea", "fatigue", "pain"];
-        var english = { nausea: "Nausea", fatigue: "Fatigue", pain: "Pain" };
-        var result = document.getElementById("result");
- 
-        // Check that every answer is a whole number from 0 to 10
-        var scores = {};
-        for (var i = 0; i < ids.length; i++) {
-          var v = parseInt(document.getElementById(ids[i]).value, 10);
-          if (isNaN(v) || v < 0 || v > 10) {
-            result.className = "alert";
-            result.textContent = t("invalid");
-            return;
-          }
-          scores[ids[i]] = v;
-        }
- 
-        var qr = {
-          resourceType: "QuestionnaireResponse",
-          language: lang,                       // records "en" or "es"
-          status: "completed",
-          subject: { reference: "Patient/" + client.patient.id },
-          authored: new Date().toISOString(),
-          item: ids.map(function (id) {
-            return {
-              linkId: id,                       // same in both languages
-              text: english[id],                // stored in English for the care team
-              answer: [{ valueInteger: scores[id] }]
-            };
-          })
-        };
- 
-        client.create(qr).then(function (saved) {
-          var severe = ids.some(function (id) { return scores[id] >= 7; });
-          result.className = severe ? "alert" : "ok";
-          result.textContent = t("saved") + saved.id + " | " + (severe ? t("alert") : t("noAlert"));
-        }).catch(function (err) {
-          result.className = "alert";
-          result.textContent = t("error") + err.message;
-        });
-      };
- 
-    }).catch(function (err) {
-      document.getElementById("patient").textContent = t("launchError") + err.message;
-    });
-  </script>
-</body>
-</html>
+
+      // Create a QuestionnaireResponse when
