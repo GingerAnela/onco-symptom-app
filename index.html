@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head><title>Launching...</title></head>
+<body>
+  <p>Connecting to the EHR...</p>
+  <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
+  <script>
+    FHIR.oauth2.authorize({
+      clientId: "onco-symptom-app",
+      scope: "launch launch/patient openid fhirUser patient/Patient.read patient/Condition.read patient/Observation.read patient/QuestionnaireResponse.write",
+      redirectUri: "index.html"
+    });
+  </script>
+</body>
+</html>
